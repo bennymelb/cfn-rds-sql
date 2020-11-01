@@ -2,7 +2,7 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: 'This is all the supporting infrastructure for standing up a RDS instance'
 Parameters:
   Environment:
-    Description: The environment of this EC2 instance
+    Description: The environment of this stack
     Type: String
     AllowedValues: [dev,test,prod]
   AppName:
