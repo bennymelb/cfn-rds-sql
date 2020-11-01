@@ -1,0 +1,201 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'This is all the supporting infrastructure for standing up a RDS instance'
+Parameters:
+  Environment:
+    Description: The environment of this EC2 instance
+    Type: String
+    AllowedValues: [dev,test,prod]
+  AppName:
+    Description: The name of the application this stack belongs to
+    Type: String
+  VpcId:
+    Description: The Id of the VPC we are going to deploy to
+    Type: AWS::EC2::VPC::Id
+  SubnetIds:
+    Description: The Id of the subnet we are going to deploy to
+    Type: List<AWS::EC2::Subnet::Id>
+  SqlServerEdition:
+    Description: The sql server edition that we are going to use. Express, Web, Standard and Enterprise
+    Type: String
+    AllowedValues: [express,web,standard,enterprise]
+    Default: express
+  SqlServerMajorVersion:
+    Description: The major version of sql server that we are going to use. 
+    Type: String
+    AllowedValues: [SQLServer2012, SQLServer2014 , SQLServer2016, SQLServer2017, SQLServer2019]
+    Default: SQLServer2017
+Mappings:
+  RdsEngineEditionMap:
+    express:
+      EngineName: sqlserver-ex
+    web:
+      EngineName: sqlserver-web
+    standard:
+      EngineName: sqlserver-se
+    enterprise:
+      EngineName: sqlserver-ee
+  RdsEngineVersionMap:
+    SQLServer2012:
+      ParameterGroupVersion: '11.0'
+      OptionGroupVersion: '11.00'
+    SQLServer2014:
+      ParameterGroupVersion: '12.0'
+      OptionGroupVersion: '12.00'
+    SQLServer2016:
+      ParameterGroupVersion: '13.0'
+      OptionGroupVersion: '13.00'
+    SQLServer2017:
+      ParameterGroupVersion: '14.0'
+      OptionGroupVersion: '14.00'
+    SQLServer2019:
+      ParameterGroupVersion: '15.0'
+      OptionGroupVersion: '15.00'
+Resources:
+  RdsSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub '${Environment}-${AppName}-RDS-SecurityGroup'
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 1433
+        ToPort: 1433
+        CidrIp: 0.0.0.0/0
+        Description: Allow SQL connection from anywhere
+  RdsSgParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: !Sub ${Environment}-${AppName}-RDS-SecurityGroup
+      Name: !Sub /${Environment}/${AppName}/rdssg
+      Type: String
+      Value: !Ref RdsSg
+  RdsSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: !Sub ${Environment}-${AppName}-RDS-SubnetGroup
+      DBSubnetGroupName: !Sub ${Environment}-${AppName}-RDS-SubnetGroup
+      SubnetIds: !Ref SubnetIds
+  RdSubnetGroupParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: !Sub ${Environment}-${AppName}-RDS-SubnetGroup
+      Name: !Sub /${Environment}/${AppName}/rdssubnetgroup
+      Type: String
+      Value: !Ref RdsSubnetGroup
+  RdsOptionGroup: 
+    Type: AWS::RDS::OptionGroup
+    Properties: 
+      EngineName: !FindInMap [ RdsEngineEditionMap, !Ref SqlServerEdition, EngineName ]
+      MajorEngineVersion: !FindInMap [ RdsEngineVersionMap, !Ref SqlServerMajorVersion, OptionGroupVersion ]
+      OptionGroupDescription: !Sub ${Environment}-${AppName}-RDS-OptionGroup
+      OptionConfigurations:
+        - 
+          OptionName: SQLSERVER_BACKUP_RESTORE
+          OptionSettings:
+            -
+              Name:  IAM_ROLE_ARN
+              Value: !GetAtt RdsSqlBackupRole.Arn
+  RdsOptionGroupParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: !Sub ${Environment}-${AppName}-RDS-OptionGroup
+      Name: !Sub /${Environment}/${AppName}/rdsoptiongroup
+      Type: String
+      Value: !Ref RdsOptionGroup
+  RdsParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Properties: 
+      Description: !Sub ${Environment}-${AppName}-RDS-ParameterGroup
+      Family: !Join [ "-", [!FindInMap [ RdsEngineEditionMap, !Ref SqlServerEdition, EngineName ], !FindInMap [ RdsEngineVersionMap, !Ref SqlServerMajorVersion, ParameterGroupVersion ] ] ]
+      Parameters:
+        rds.force_ssl: 1
+  RdsParameterGroupParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: !Sub ${Environment}-${AppName}-RDS-ParameterGroup
+      Name: !Sub /${Environment}/${AppName}/rdsparametergroup
+      Type: String
+      Value: !Ref RdsParameterGroup
+  RdsSqlBackupRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "rds.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        -
+          PolicyName: !Sub '${Environment}-${AppName}-IAM-Policy'
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action: "s3:putObject"
+                Resource: "*"
+  RdsMasterCred:
+    Type: AWS::SecretsManager::Secret
+    Properties: 
+      Description: !Sub ${Environment}-${AppName}-Rds-Master-Credential
+      Name: !Sub /${Environment}/${AppName}/rdsmastercred
+      GenerateSecretString: 
+        SecretStringTemplate: '{"username": "test-user"}'
+        GenerateStringKey: "password"
+        PasswordLength: 30
+        ExcludeCharacters: '"@/\'
+      KmsKeyId: !Ref RdsCmk
+  RdsCmk:
+    Type: AWS::KMS::Key
+    Properties: 
+      Description: !Sub ${Environment}-${AppName}-Rds-Cmk
+      Enabled: True
+      EnableKeyRotation: True
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: '2012-10-17'  
+        Statement:
+          - Sid: Allow admin using key for RDS
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action: 
+              - kms:*
+            Resource: '*'
+            Condition:
+              StringEquals:
+                aws:PrincipalTag/group: admin
+  RdsCmkParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: !Sub ${Environment}-${AppName}-RDS-Cmk
+      Name: !Sub /${Environment}/${AppName}/rdscmk
+      Type: String
+      Value: !Ref RdsCmk
+Outputs:
+  RdsSg:
+    Description: The security group resource id for RDS
+    Value: !GetAtt RdsSg.GroupId
+  OptionGroup:
+    Description: The RDS option group Name
+    Value: !Ref RdsOptionGroup
+  ParameterGroup:
+    Description: The RDS parameter group name
+    Value: !Ref RdsParameterGroup
+  SubnetGroup:
+    Description: The Rds Subnet Group name
+    Value: !Ref RdsSubnetGroup
+  RdsSqlBackupRole:
+    Description: The IAM role for the RDS SQL native backup 
+    Value: !Ref RdsSqlBackupRole
+  RdsMasterCred:
+    Description: The master credential for RDS
+    Value: !Ref RdsMasterCred
+  RdsCmk:
+    Description: The kms cmk for RDS
+    Value: !Ref RdsCmk
