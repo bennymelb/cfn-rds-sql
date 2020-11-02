@@ -50,9 +50,13 @@ Mappings:
     SQLServer2019:
       ParameterGroupVersion: '15.0'
       OptionGroupVersion: '15.00'
+Conditions:
+  IsProd: !Equals [ !Ref Environment, prod ]
+  IsNonprod: !Not [ !Equals [ !Ref Environment, prod ] ]
 Resources:
-  RdsSg:
+  RdsNonprodSg:
     Type: AWS::EC2::SecurityGroup
+    Condition: IsNonprod
     Properties:
       GroupDescription: !Sub '${Environment}-${AppName}-RDS-SecurityGroup'
       VpcId: !Ref VpcId
@@ -62,13 +66,25 @@ Resources:
         ToPort: 1433
         CidrIp: 0.0.0.0/0
         Description: Allow SQL connection from anywhere
+  RdsProdSg:
+    Type: AWS::EC2::SecurityGroup
+    Condition: IsProd
+    Properties:
+      GroupDescription: !Sub '${Environment}-${AppName}-RDS-SecurityGroup'
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 1433
+        ToPort: 1433
+        CidrIp: 0.0.0.0/0
+        Description: Allow SQL connection from known ip
   RdsSgParam:
     Type: AWS::SSM::Parameter
     Properties:
       Description: !Sub ${Environment}-${AppName}-RDS-SecurityGroup
       Name: !Sub /${Environment}/${AppName}/rdssg
       Type: String
-      Value: !Sub ${RdsSg}
+      Value: !If [ IsProd, !Ref RdsProdSg, !Ref RdsNonprodSg ]
   RdsSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
@@ -192,9 +208,14 @@ Resources:
       Type: String
       Value: !Ref SqlServerMajorVersion
 Outputs:
-  RdsSg:
+  RdsNonprodSg:
     Description: The security group resource id for RDS
-    Value: !GetAtt RdsSg.GroupId
+    Value: !GetAtt RdsNonprodSg.GroupId
+    Condition: IsNonprod
+  RdsProdSg:
+    Description: The security group resource id for RDS
+    Value: !GetAtt RdsProdSg.GroupId
+    Condition: IsProd
   OptionGroup:
     Description: The RDS option group Name
     Value: !Ref RdsOptionGroup
