@@ -34,7 +34,7 @@ Mappings:
       EngineName: sqlserver-se
     enterprise:
       EngineName: sqlserver-ee
-  RdsEngineVersionMap:
+  RdsEngineMajorVersionMap:
     SQLServer2012:
       ParameterGroupVersion: '11.0'
       OptionGroupVersion: '11.00'
@@ -68,7 +68,7 @@ Resources:
       Description: !Sub ${Environment}-${AppName}-RDS-SecurityGroup
       Name: !Sub /${Environment}/${AppName}/rdssg
       Type: String
-      Value: !Ref RdsSg
+      Value: !Sub ${RdsSg}
   RdsSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
@@ -86,7 +86,7 @@ Resources:
     Type: AWS::RDS::OptionGroup
     Properties: 
       EngineName: !FindInMap [ RdsEngineEditionMap, !Ref SqlServerEdition, EngineName ]
-      MajorEngineVersion: !FindInMap [ RdsEngineVersionMap, !Ref SqlServerMajorVersion, OptionGroupVersion ]
+      MajorEngineVersion: !FindInMap [ RdsEngineMajorVersionMap, !Ref SqlServerMajorVersion, OptionGroupVersion ]
       OptionGroupDescription: !Sub ${Environment}-${AppName}-RDS-OptionGroup
       OptionConfigurations:
         - 
@@ -106,7 +106,7 @@ Resources:
     Type: AWS::RDS::DBParameterGroup
     Properties: 
       Description: !Sub ${Environment}-${AppName}-RDS-ParameterGroup
-      Family: !Join [ "-", [!FindInMap [ RdsEngineEditionMap, !Ref SqlServerEdition, EngineName ], !FindInMap [ RdsEngineVersionMap, !Ref SqlServerMajorVersion, ParameterGroupVersion ] ] ]
+      Family: !Join [ "-", [!FindInMap [ RdsEngineEditionMap, !Ref SqlServerEdition, EngineName ], !FindInMap [ RdsEngineMajorVersionMap, !Ref SqlServerMajorVersion, ParameterGroupVersion ] ] ]
       Parameters:
         rds.force_ssl: 1
   RdsParameterGroupParam:
@@ -145,7 +145,7 @@ Resources:
       Description: !Sub ${Environment}-${AppName}-Rds-Master-Credential
       Name: !Sub /${Environment}/${AppName}/rdsmastercred
       GenerateSecretString: 
-        SecretStringTemplate: '{"username": "test-user"}'
+        SecretStringTemplate: '{"username": "rdsmaster"}'
         GenerateStringKey: "password"
         PasswordLength: 30
         ExcludeCharacters: '"@/\'
@@ -173,10 +173,10 @@ Resources:
   RdsCmkParam:
     Type: AWS::SSM::Parameter
     Properties:
-      Description: !Sub ${Environment}-${AppName}-RDS-Cmk
+      Description: !Sub ${Environment}-${AppName}-RDS-Cmk-Arn
       Name: !Sub /${Environment}/${AppName}/rdscmk
       Type: String
-      Value: !Ref RdsCmk
+      Value: !GetAtt RdsCmk.Arn
   SqlServerEditionParam:
     Type: AWS::SSM::Parameter
     Properties:
