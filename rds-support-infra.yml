@@ -177,6 +177,20 @@ Resources:
       Name: !Sub /${Environment}/${AppName}/rdscmk
       Type: String
       Value: !Ref RdsCmk
+  SqlServerEditionParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: !Sub ${Environment}-${AppName}-RDS-SqlServerEdition
+      Name: !Sub /${Environment}/${AppName}/rdssqlserveredition
+      Type: String
+      Value: !Ref SqlServerEdition
+  SqlServerMajorVersionParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: !Sub ${Environment}-${AppName}-RDS-SqlServerMajorVersion
+      Name: !Sub /${Environment}/${AppName}/rdssqlservermajorversion
+      Type: String
+      Value: !Ref SqlServerMajorVersion
 Outputs:
   RdsSg:
     Description: The security group resource id for RDS
