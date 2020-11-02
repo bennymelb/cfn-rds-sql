@@ -1,0 +1,183 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'This is the RDS SQL server instance, it uses the supporting resource created in the supporting stack'
+Parameters:
+  Environment:
+    Description: The environment of this stack
+    Type: String
+    AllowedValues: [dev,test,prod]
+  AppName:
+    Description: The name of the application this stack belongs to
+    Type: String
+  RdsAllocatedStorage:
+    Description: The stanard allocated storage size for RDS
+    Type: Number
+    MinValue: 20
+    MaxValue: 16384
+    Default: 20
+  RdsBackupRetentionPeriod:
+    Description: The backup retention period in Days for RDS, 0 means disable backup, max is 35
+    Type: Number
+    MinValue: 0
+    MaxValue: 35
+    Default: 7
+  RdsCACertificateIdentifier:
+    Description: The name of the CA Cert bundle. If the current CA bundle expired, we will need to specify a new CA bundle.
+    Type: String
+    Default: rds-ca-2019
+  RdsInstanceClass:
+    Description: The Size Of the RDS instance, the list of available instance is purposely limited to small instance to prevent bill shock
+    Type: String
+    AllowedValues: [db.t2.micro,db.t3.small,db.t3.medium,db.t3.large,db.t3.xlarge,db.m5.large,db.m5.xlarge,db.m5.2xlarge,db.r5.xlarge,db.r5.2xlarge] 
+    Default: db.t3.xlarge
+  RdsInstanceIdentifier:
+    Description: The identifier of the RDS instance. This makes up of the url that connects to RDS
+    Type: String
+  RdsParameterGroupName:
+    Description: The parameter group for this RDS
+    Type: AWS::SSM::Parameter::Value<String>
+  RdsSnapshotIdentifier:
+    Description: specify a rds snapshot arn here if you want to create a DB from a snapshot
+    Type: String
+  RdsSubnetGroupName:
+    Description: The Subnet Group for this RDS
+    Type: AWS::SSM::Parameter::Value<String>
+  SqlServerEdition:
+    Description: The sql server edition that stored in ssm parameter store
+    Type: AWS::SSM::Parameter::Value<String>
+  SqlServerMajorVersion:
+    Description: The major version of sql server that stored in ssm parameter store
+    Type: AWS::SSM::Parameter::Value<String>
+  SqlServerMinorVersion:
+    Description: The minor version of the sql server we are going to use
+    Type: String
+    AllowedValues: [latest,nm1]
+    Default: latest
+  RdsCmk:
+    Description: The kms cmk arn for rds stored in ssm parameter store
+    Type: AWS::SSM::Parameter::Value<String>
+  MultiAzEnabled:
+    Description: To set the RDS to multi AZ or single AZ
+    Type: String
+    AllowedValues: [True, False]
+    Default: False
+  RdsOptionGroupName:
+    Description: The Option Group name stored in SSM parameter store
+    Type: AWS::SSM::Parameter::Value<String>
+  RdsPerformanceInsightsRetentionPeriod:
+    Description: The Performance Insight data Retention period, 7 or 731
+    Type: String
+    AllowedValues: ['7','731']
+    Default: '7'
+  RdsPort:
+    Description: The port number used by RDS
+    Type: Number
+    MinValue: 1025
+    MaxValue: 65535
+    Default: 1433
+  RdsPreferredBackupWindow:
+    Description: RDS Preferred backup windows in UTC, Must be in the format hh24:mi-hh24:mi, Must be at least 30mins, Default to 1am-2am AEST
+    Type: String
+    Default: "15:00-16:00"
+  RdsPreferredMaintenanceWindow:
+    Description: "Rds Preferred maintenance window in UTC, Format: ddd:hh24:mi-ddd:hh24:mi, default to Saturday 3am-4am AEST"
+    Type: String
+    Default: sun:17:00-sun:18:00
+  RdsVPCSecurityGroups:
+    Description: Security Group stored in SSM parameter for RDS
+    Type: AWS::SSM::Parameter::Value<String>
+Mappings:
+  RdsEngineEditionMap:
+    express:
+      EngineName: sqlserver-ex
+    web:
+      EngineName: sqlserver-web
+    standard:
+      EngineName: sqlserver-se
+    enterprise:
+      EngineName: sqlserver-ee
+  RdsEngineMajorVersionMap:
+    SQLServer2012:
+      ParameterGroupVersion: '11.0'
+      OptionGroupVersion: '11.00'
+    SQLServer2014:
+      ParameterGroupVersion: '12.0'
+      OptionGroupVersion: '12.00'
+    SQLServer2016:
+      ParameterGroupVersion: '13.0'
+      OptionGroupVersion: '13.00'
+    SQLServer2017:
+      ParameterGroupVersion: '14.0'
+      OptionGroupVersion: '14.00'
+    SQLServer2019:
+      ParameterGroupVersion: '15.0'
+      OptionGroupVersion: '15.00'
+  RdsEngineMinorVersionMap:
+    SQLServer2012:
+      latest: '7493.4.v1'
+      nm1: '7462.6.v1'
+    SQLServer2014:
+      latest: '6329.1.v1'
+      nm1: '6293.0.v1'
+    SQLServer2016:
+      latest: '5820.21.v1'
+      nm1: '5598.27.v1'
+    SQLServer2017:
+      latest: '3294.2.v1'
+      nm1: '3281.6.v1'
+    SQLServer2019:
+      latest: '4043.16.v1'
+Conditions:
+  IsSQLExpress: !Equals [ !Ref SqlServerEdition, express ]
+Resources:
+  RdsInstance:
+    Type: AWS::RDS::DBInstance
+    Properties: 
+      AllocatedStorage: !Ref RdsAllocatedStorage
+      AllowMajorVersionUpgrade: False
+      AutoMinorVersionUpgrade: True
+      BackupRetentionPeriod: !Ref RdsBackupRetentionPeriod
+      CACertificateIdentifier: !Ref RdsCACertificateIdentifier
+      CopyTagsToSnapshot: True
+      DBInstanceClass: !Ref RdsInstanceClass
+      DBInstanceIdentifier: !Ref RdsInstanceIdentifier
+      DBParameterGroupName: !Ref RdsParameterGroupName
+      DBSnapshotIdentifier: !Ref RdsSnapshotIdentifier
+      DBSubnetGroupName: !Ref RdsSubnetGroupName
+      DeletionProtection: True
+      EnableCloudwatchLogsExports: 
+        - error
+        - !If [ IsSQLExpress, !Ref AWS::NoValue, agent ] 
+      EnablePerformanceInsights: True
+      Engine: !FindInMap [ RdsEngineEditionMap, !Ref SqlServerEdition, EngineName ]
+      EngineVersion: !Join [ ".", [!FindInMap [ RdsEngineMajorVersionMap, !Ref SqlServerMajorVersion, OptionGroupVersion ], !FindInMap [ RdsEngineMinorVersionMap, !Ref SqlServerMajorVersion, !Ref SqlServerMinorVersion ] ] ]
+      KmsKeyId: !If [ IsSQLExpress, !Ref AWS::NoValue, !Ref RdsCmk ] 
+      LicenseModel: license-included
+      MasterUsername: !Sub '{{resolve:secretsmanager:/${Environment}/${AppName}/rdsmastercred::username}}'
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:/${Environment}/${AppName}/rdsmastercred::password}}'
+      MonitoringInterval: 5
+      MonitoringRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/rds-monitoring-role
+      MultiAZ: !Ref MultiAzEnabled
+      OptionGroupName: !Ref RdsOptionGroupName
+      PerformanceInsightsRetentionPeriod: !Ref RdsPerformanceInsightsRetentionPeriod
+      Port: !Ref RdsPort
+      PreferredBackupWindow: !Ref RdsPreferredBackupWindow
+      PreferredMaintenanceWindow: !Ref RdsPreferredMaintenanceWindow
+      PubliclyAccessible: True
+      StorageEncrypted: !If [ IsSQLExpress, False, True ]
+      StorageType: gp2
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: AppName
+          Value: !Ref AppName
+      VPCSecurityGroups: !Split [ ',', !Ref RdsVPCSecurityGroups ]
+Outputs:
+  RdsInstanceName:
+    Description: The instance name of the RDS
+    Value: !Ref RdsInstance
+  RdsInstanceEndpointAddress:
+    Description: The endpoint url of the RDS
+    Value: !GetAtt RdsInstance.Endpoint.Address
+  RdsInstancePort:
+    Description: The port number of the RDS
+    Value: !GetAtt RdsInstance.Endpoint.Port
