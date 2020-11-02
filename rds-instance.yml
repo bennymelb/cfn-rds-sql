@@ -171,6 +171,12 @@ Resources:
         - Key: AppName
           Value: !Ref AppName
       VPCSecurityGroups: !Split [ ',', !Ref RdsVPCSecurityGroups ]
+  RdsSecretsManagerAttachment:
+    Type: AWS::SecretsManager::SecretTargetAttachment
+    Properties:
+      SecretId: !Sub /${Environment}/${AppName}/rdsmastercred
+      TargetId: !Ref RdsInstance
+      TargetType: AWS::RDS::DBInstance
 Outputs:
   RdsInstanceName:
     Description: The instance name of the RDS
