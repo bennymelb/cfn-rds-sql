@@ -9,7 +9,7 @@ Parameters:
     Description: The name of the application this stack belongs to
     Type: String
   RdsAllocatedStorage:
-    Description: The stanard allocated storage size for RDS
+    Description: The standard allocated storage size for RDS
     Type: Number
     MinValue: 20
     MaxValue: 16384
@@ -85,6 +85,13 @@ Parameters:
   RdsVPCSecurityGroups:
     Description: Security Group stored in SSM parameter for RDS
     Type: AWS::SSM::Parameter::Value<String>
+  RdsAlertSnsTopic:
+    Description: SNS topic stored in SSM parameter for RDS alert 
+    Type: AWS::SSM::Parameter::Value<String>
+  RdsFreeStorageThreshold:
+    Description: The amount of free storage space in GB for alerting
+    Type: Number
+    Default: 5
 Mappings:
   RdsEngineEditionMap:
     express:
@@ -177,6 +184,27 @@ Resources:
       SecretId: !Sub /${Environment}/${AppName}/rdsmastercred
       TargetId: !Ref RdsInstance
       TargetType: AWS::RDS::DBInstance
+  RDSFreeStorageAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref RdsAlertSnsTopic
+      AlarmDescription: !Sub 'RDS Free Storage Alarm for ${RdsInstance}'
+      ComparisonOperator: LessThanThreshold
+      DatapointsToAlarm: 1
+      Dimensions:
+      - Name: DBInstanceIdentifier
+        Value: !Ref RdsInstance
+      EvaluationPeriods: 1
+      MetricName: FreeStorageSpace
+      Namespace: AWS/RDS
+      OKActions:
+        - !Ref RdsAlertSnsTopic
+      Period: 60
+      Statistic: Average
+      Threshold: !Ref RdsFreeStorageThreshold
+      TreatMissingData: ignore
+      Unit: Gigabytes
 Outputs:
   RdsInstanceName:
     Description: The instance name of the RDS
