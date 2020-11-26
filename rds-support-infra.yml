@@ -24,6 +24,9 @@ Parameters:
     Type: String
     AllowedValues: [SQLServer2012, SQLServer2014 , SQLServer2016, SQLServer2017, SQLServer2019]
     Default: SQLServer2017
+  AlertRecipient:
+    Description: The email to receive RDS alert
+    Type: String
 Mappings:
   RdsEngineEditionMap:
     express:
@@ -196,6 +199,27 @@ Resources:
             Condition:
               StringEquals:
                 aws:PrincipalTag/group: admin
+  RdsAlertSnsTopic:
+    Type: AWS::SNS::Topic
+    Properties: 
+      DisplayName: 'RDS Monitoring'
+      Subscription: 
+      - Endpoint: !Ref AlertRecipient
+        Protocol: email
+  RdsAlertSnsTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref RdsAlertSnsTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: '*'
+            Action:
+              - "SNS:Publish"
+            Resource: '*'
   RdsCmkParam:
     Type: AWS::SSM::Parameter
     Properties:
@@ -217,6 +241,13 @@ Resources:
       Name: !Sub /${Environment}/${AppName}/rdssqlservermajorversion
       Type: String
       Value: !Ref SqlServerMajorVersion
+  RdsAlertSnsTopicParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: !Sub ${Environment}-${AppName}-RDS-AlertSnsTopic
+      Name: !Sub /${Environment}/${AppName}/rdsalertsnstopic
+      Type: String
+      Value: !Ref RdsAlertSnsTopic
 Outputs:
   RdsNonprodSg:
     Description: The security group resource id for RDS
@@ -244,3 +275,6 @@ Outputs:
   RdsCmk:
     Description: The kms cmk for RDS
     Value: !Ref RdsCmk
+  RdsAlertSnsTopic:
+    Description: The SNS Topic for the alert to sent to
+    Value: !Ref RdsAlertSnsTopic
