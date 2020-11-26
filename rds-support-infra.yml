@@ -76,8 +76,18 @@ Resources:
       - IpProtocol: tcp
         FromPort: 1433
         ToPort: 1433
-        CidrIp: 0.0.0.0/0
-        Description: Allow SQL connection from known ip
+        CidrIp: 60.241.14.94/32
+        Description: Allow SQL connection from Rowville Shop
+      - IpProtocol: tcp
+        FromPort: 1433
+        ToPort: 1433
+        CidrIp: 121.223.198.148/32
+        Description: Allow SQL connection from Warehouse (Home)
+      - IpProtocol: tcp
+        FromPort: 1433
+        ToPort: 1433
+        CidrIp: 60.241.14.115/32
+        Description: Allow SQL connection from Heidelberg Shop
   RdsSgParam:
     Type: AWS::SSM::Parameter
     Properties:
